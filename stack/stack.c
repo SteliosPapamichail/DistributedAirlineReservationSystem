@@ -18,10 +18,12 @@ struct stack *createStack(int capacity) {
     return newStack;
 }
 
+bool isStackFull(struct stack *stack) {
+    return stack->size == stack->capacity;
+}
+
 void push(struct stack *stack, struct Reservation reservation) {
     if (stack->size == stack->capacity) {
-        // Handle stack overflow
-        //TODO:sp put the reservation in the queue
         return;
     }
 
@@ -59,7 +61,7 @@ struct Reservation pop(struct stack *stack) {
     return reservation;
 }
 
-void destroyStack(struct stack* stack) {
+void destroyStack(struct stack *stack) {
     if (stack == NULL) {
         return;
     }
@@ -67,7 +69,7 @@ void destroyStack(struct stack* stack) {
     // Lock the stack before destroying elements
     pthread_mutex_lock(&(stack->top_lock));
     while (stack->top != NULL) {
-        struct stack_reservation* temp = stack->top;
+        struct stack_reservation *temp = stack->top;
         stack->top = temp->next;
         free(temp);
     }

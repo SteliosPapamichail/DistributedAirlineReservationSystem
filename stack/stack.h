@@ -6,6 +6,7 @@
 #define HY486_PROJECT_STACK_H
 
 #include <pthread.h>
+#include <stdbool.h>
 #include "../common/reservations.h"
 
 /**
@@ -27,9 +28,14 @@ struct stack {
     int capacity; // maximum number of reservations that can be stored in the stack
 };
 
-struct stack* createStack(int capacity);
-void push(struct stack* stack, struct Reservation reservation);
+struct stack *createStack(int capacity);
+
+bool isStackFull(struct stack *stack);
+
+void push(struct stack *stack, struct Reservation reservation);
+
 struct Reservation pop(struct stack *stack);
-void destroyStack(struct stack* stack);
+
+void destroyStack(struct stack *stack);
 
 #endif //HY486_PROJECT_STACK_H

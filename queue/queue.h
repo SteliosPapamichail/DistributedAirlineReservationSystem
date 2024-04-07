@@ -24,4 +24,14 @@ struct queue {
     pthread_mutex_t tail_lock;
 };
 
+struct queue_reservation* create_dummy_node();
+
+struct queue *createQueue();
+
+void enqueue(struct queue *queue, struct Reservation reservation);
+
+struct Reservation dequeue(struct queue *queue);
+
+void destroyQueue(struct queue *queue);
+
 #endif //HY486_PROJECT_QUEUE_H

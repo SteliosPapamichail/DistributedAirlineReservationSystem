@@ -6,7 +6,7 @@
 #define HY486_PROJECT_RESERVATIONS_H
 
 struct Reservation {
-    int agency_id; // the id of the agency that produced this reservations
+    int agency_id; // the id of the agency that produced this reservation
     int reservation_number;
 };
 
