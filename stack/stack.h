@@ -32,6 +32,8 @@ struct stack *createStack(int capacity);
 
 bool isStackFull(struct stack *stack);
 
+bool hasStackOverflowed(struct stack *stack);
+
 void push(struct stack *stack, struct Reservation reservation);
 
 struct Reservation pop(struct stack *stack);

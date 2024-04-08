@@ -22,6 +22,10 @@ bool isStackFull(struct stack *stack) {
     return stack->size == stack->capacity;
 }
 
+bool hasStackOverflowed(struct stack *stack) {
+    return stack->size > stack->capacity;
+}
+
 void push(struct stack *stack, struct Reservation reservation) {
     if (stack->size == stack->capacity) {
         return;

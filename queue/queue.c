@@ -26,6 +26,7 @@ struct queue *createQueue() {
     // Create dummy nodes for head and tail
     queue->head = create_dummy_node();
     queue->tail = queue->head;
+    queue->size = 0;
 
     pthread_mutex_init(&(queue->head_lock), NULL);
     pthread_mutex_init(&(queue->tail_lock), NULL);
@@ -47,7 +48,7 @@ void enqueue(struct queue *queue, struct Reservation reservation) {
     // Update tail pointer atomically (for concurrent access)
     queue->tail->next = new_node;
     queue->tail = new_node;
-
+    queue->size += 1;
     pthread_mutex_unlock(&(queue->tail_lock));
 }
 
@@ -67,7 +68,7 @@ struct Reservation dequeue(struct queue *queue) {
     struct Reservation reservation = temp->reservation;
     queue->head->next = temp->next;
     free(temp);
-
+    queue->size -= 1;
     pthread_mutex_unlock(&(queue->head_lock));
 
     return reservation;

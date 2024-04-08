@@ -1,26 +1,56 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <math.h>
 #include "stack/stack.h"
 #include "queue/queue.h"
+#include "common/reservations.h"
+
+
+/**
+ * Will be equal to A^2 agencies
+ */
+unsigned int numOfAgencies = 0;
+
+/**
+ * Will be equal to A flights
+ */
+unsigned int numOfFlights = 0;
+
+/**
+ * Set by the flight controller
+ */
+unsigned int number_of_inserter_airlines = 0;
+
+/**
+ * The flight controller responsible for validating flight reservations
+ */
+pthread_t flight_controller;
+
+/**
+ * Barrier that is responsible for guaranteeing that the flight controller
+ * will start performing checks, only after all reservations have been added to
+ * the system.
+ */
+pthread_barrier_t barrier_start_1st_phase_checks;
 
 struct flight_reservations {
     struct stack *completed_reservations;
     struct queue *pending_reservations;
 };
 
-struct airline_company {
-    pthread_t thread;
+struct agency_args {
+    int agency_id;
+    struct flight_reservations *flight;
+};
+
+struct thread_args {
     unsigned int id;
 };
 
-/**
- * An agency produces A reservations in total, with res numbers:
- * i*A^2 + id
- */
-struct agency {
-    pthread_t thread;
-    unsigned int id;
+struct flight_controller_args {
+    int id;
+    struct flight_reservations **flights;
 };
 
 /**
@@ -39,10 +69,109 @@ void *airline_main(void *args) {
  * @return
  */
 void *agency_main(void *args) {
-    //TODO:sp
+    struct agency_args *th_args = (struct agency_args *) args; // cast args back to struct ptr
+    // produce A reservations concurrently
+    for (unsigned int i = 0; i < numOfFlights - 1; i++) {
+        struct Reservation *reservation = (struct Reservation *) malloc(sizeof(struct Reservation));
+        reservation->agency_id = th_args->agency_id;
+        reservation->reservation_number = (i * numOfAgencies) + th_args->agency_id;
+        if (isStackFull(th_args->flight->completed_reservations)) {  // add reservation to queue if stack is full
+            enqueue(th_args->flight->pending_reservations, *reservation);
+        } else { // add to stack
+            push(th_args->flight->completed_reservations, *reservation);
+        }
+        free(reservation);
+    }
+
+    // agency has finished importing flights, should wait for all others
+    pthread_barrier_wait(&barrier_start_1st_phase_checks);
+
+    // agency is done, free up memory
+    free(th_args);
     return NULL;
 }
 
+void *flight_controller_main(void *args) {
+    // wait for all agencies to finish their work before proceeding with the checks
+    pthread_barrier_wait(&barrier_start_1st_phase_checks);
+    struct flight_controller_args *controllerArgs = (struct flight_controller_args *) args;// cast to controller args
+    // check-related vars
+    unsigned int totalReservations = 0;
+    unsigned int expectedTotalReservations = numOfFlights ^ 3;
+    unsigned int totalKeySum = 0;
+    unsigned int expectedKeySum = (((numOfFlights ^ 6) + (numOfFlights ^ 3)) / 2); // (A^6 + A^3) / 2
+
+    // start checks and check-related calculations
+    for (unsigned int i = 0; i < numOfFlights - 1; i++) {
+        struct stack *completedReservations = controllerArgs->flights[i]->completed_reservations;
+        struct queue *pendingReservations = controllerArgs->flights[i]->pending_reservations;
+
+        // check #1: stack overflow
+        if (hasStackOverflowed(completedReservations)) {
+            // log the error and exit
+            printf("Flight %d: stack has overflowed! Check failed (capacity: %d, found: %d)", i,
+                   completedReservations->capacity,
+                   completedReservations->size);
+            pthread_exit((void *) -1); //todo:sp revisit so that the program exits but cleans up first
+        }
+        printf("Flight %d: stack overflow check passed (capacity: %d, found: %d)", i,
+               completedReservations->capacity,
+               completedReservations->size);
+        // check #2: total size
+        totalReservations += completedReservations->size +
+                             pendingReservations->size;
+        // check #3: total keysum
+        // traverse the stack and sum the reservation numbers
+        struct stack_reservation *currentStackNode = completedReservations->top;
+        // lock to ensure thread safety
+        pthread_mutex_lock(&(completedReservations->top_lock));
+        while (currentStackNode != NULL) {
+            totalKeySum += currentStackNode->reservation.reservation_number;
+            currentStackNode = currentStackNode->next;
+        }
+        pthread_mutex_unlock(&(completedReservations->top_lock));
+
+        if (isStackFull(
+                completedReservations)) { // traverse the queue if needed and sum the reservation numbers
+            // traverse queue
+
+            // acquire locks for thread safety
+            pthread_mutex_lock(&pendingReservations->head_lock);
+            pthread_mutex_lock(&pendingReservations->tail_lock);
+            struct queue_reservation *curr = pendingReservations->head->next; // get first node by skipping dummy node
+            while (curr != NULL) {
+                totalKeySum += curr->reservation.reservation_number;
+                curr = curr->next;
+            }
+
+            // update number of inserter airlines if the queue is not empty for this flight
+            if (pendingReservations->size > 0) {
+                number_of_inserter_airlines += 1;
+            }
+
+            // release locks
+            pthread_mutex_unlock(&pendingReservations->head_lock);
+            pthread_mutex_unlock(&pendingReservations->tail_lock);
+
+        }
+    }
+    // check #2: total size
+    if (totalReservations != expectedTotalReservations) {
+        printf("Total size check failed (expected: %d, found: %d)", expectedTotalReservations, totalReservations);
+        pthread_exit((void *) -2);
+    }
+    printf("Total size check passed (expected: %d, found: %d)", expectedTotalReservations, totalReservations);
+
+    // check #3: Total keysum
+    if (totalKeySum != expectedKeySum) {
+        printf("Total keysum check failed (expected: %d, found %d)", expectedKeySum, totalKeySum);
+        pthread_exit((void *) -3);
+    }
+    printf("Total size check passed (expected: %d, found: %d)", expectedTotalReservations, totalReservations);
+    // all checks passed
+
+    return 0;
+}
 
 int main(int argc, char *argv[]) {
     if (argc > 2) exit(-1);
@@ -51,16 +180,25 @@ int main(int argc, char *argv[]) {
     int A = atoi(argv[1]);
 
     // declare the airliner, flights and agency threads
-    struct airline_company *airlineCompanies[A];
-    struct agency *agencies[A * A];
-    struct flight_reservations *flights[A]; // reservation i belongs to airline with id (i + 1)
+    pthread_t airlineCompanies[A];
+    numOfFlights = A;
+    numOfAgencies = A * A;
+    pthread_t agencies[numOfAgencies];
+    struct agency_args *agencyArguments[numOfAgencies];
+    struct flight_reservations *flights[A]; // reservation i belongs to airline with agency_id (i + 1)
 
-    for (int i = 0; i < A * A; i++) {
+    // init the flight controller
+    struct flight_controller_args *controllerArgs = malloc(sizeof(struct flight_controller_args));
+    controllerArgs->id = 0;
+    controllerArgs->flights = flights;
+    pthread_create(&flight_controller, NULL, flight_controller_main, controllerArgs);
+
+    // init controller barrier
+    pthread_barrier_init(&barrier_start_1st_phase_checks, NULL,
+                         numOfAgencies + 1); // using Π + 1 due to the extra controller one
+
+    for (unsigned int i = 0; i < A * A; i++) {
         if (i < A) {
-            // init airline threads
-            airlineCompanies[i] = (struct airline_company *) malloc(sizeof(struct airline_company));
-            airlineCompanies[i]->id = i + 1;
-            pthread_create(&(airlineCompanies[i]->thread), NULL, airline_main, NULL);
             // init flight reservations table
             flights[i] = (struct flight_reservations *) malloc(sizeof(struct flight_reservations));
             // stack capacity depends on the flight's position in the table
@@ -68,10 +206,25 @@ int main(int argc, char *argv[]) {
             flights[i]->pending_reservations = createQueue();
         }
         // init agencies
-        agencies[i] = (struct agency *) malloc(sizeof(struct agency));
-        agencies[i]->id = i + 1;
-        pthread_create(&(agencies[i]->thread), NULL, agency_main, NULL);
+        agencyArguments[i] = malloc(sizeof(struct agency_args));
+        agencyArguments[i]->agency_id = i + 1;
+        agencyArguments[i]->flight = flights[i % A]; // the flight for whose reservations the agency is responsible
+        pthread_create(&(agencies[i]), NULL, agency_main, agencyArguments[i]);
     }
+
+
+    // wait for controller and agency threads to finish
+    for (unsigned int i = 0; i < numOfAgencies; i++) {
+        pthread_join(flight_controller, NULL);
+        pthread_join(agencies[i], NULL);
+    }
+
+    // agencies have completed their work after this point and we can clean up
+    free(controllerArgs);
+    for (unsigned int i = 0; i < numOfAgencies; i++) {
+        free(agencyArguments[i]);
+    }
+    pthread_barrier_destroy(&barrier_start_1st_phase_checks);
 
     //todo cleanup flights, companies, agencies, etc.
 }

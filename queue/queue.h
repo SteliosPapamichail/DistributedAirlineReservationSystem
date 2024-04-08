@@ -18,13 +18,14 @@ struct queue_reservation {
  * the head and tail.
  */
 struct queue {
+    unsigned int size;
     struct queue_reservation *head;
     struct queue_reservation *tail;
     pthread_mutex_t head_lock;
     pthread_mutex_t tail_lock;
 };
 
-struct queue_reservation* create_dummy_node();
+struct queue_reservation *create_dummy_node();
 
 struct queue *createQueue();
 
