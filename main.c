@@ -92,8 +92,6 @@ void *agency_main(void *args) {
 }
 
 void *flight_controller_main(void *args) {
-    // wait for all agencies to finish their work before proceeding with the checks
-    pthread_barrier_wait(&barrier_start_1st_phase_checks);
     struct flight_controller_args *controllerArgs = (struct flight_controller_args *) args;// cast to controller args
     // check-related vars
     unsigned int totalReservations = 0;
@@ -109,12 +107,12 @@ void *flight_controller_main(void *args) {
         // check #1: stack overflow
         if (hasStackOverflowed(completedReservations)) {
             // log the error and exit
-            printf("Flight %d: stack has overflowed! Check failed (capacity: %d, found: %d)", i,
+            printf("Flight %d: stack has overflowed! Check failed (capacity: %d, found: %d)\n", i,
                    completedReservations->capacity,
                    completedReservations->size);
             pthread_exit((void *) -1); //todo:sp revisit so that the program exits but cleans up first
         }
-        printf("Flight %d: stack overflow check passed (capacity: %d, found: %d)", i,
+        printf("Flight %d: stack overflow check passed (capacity: %d, found: %d)\n", i,
                completedReservations->capacity,
                completedReservations->size);
         // check #2: total size
@@ -157,19 +155,20 @@ void *flight_controller_main(void *args) {
     }
     // check #2: total size
     if (totalReservations != expectedTotalReservations) {
-        printf("Total size check failed (expected: %d, found: %d)", expectedTotalReservations, totalReservations);
+        printf("Total size check failed (expected: %d, found: %d)\n", expectedTotalReservations, totalReservations);
         pthread_exit((void *) -2);
     }
-    printf("Total size check passed (expected: %d, found: %d)", expectedTotalReservations, totalReservations);
+    printf("Total size check passed (expected: %d, found: %d)\n", expectedTotalReservations, totalReservations);
 
     // check #3: Total keysum
     if (totalKeySum != expectedKeySum) {
-        printf("Total keysum check failed (expected: %d, found %d)", expectedKeySum, totalKeySum);
+        printf("Total keysum check failed (expected: %d, found %d)\n", expectedKeySum, totalKeySum);
         pthread_exit((void *) -3);
     }
-    printf("Total size check passed (expected: %d, found: %d)", expectedTotalReservations, totalReservations);
+    printf("Total size check passed (expected: %d, found: %d)\n", expectedTotalReservations, totalReservations);
     // all checks passed
 
+    free(controllerArgs);
     return 0;
 }
 
@@ -187,15 +186,9 @@ int main(int argc, char *argv[]) {
     struct agency_args *agencyArguments[numOfAgencies];
     struct flight_reservations *flights[A]; // reservation i belongs to airline with agency_id (i + 1)
 
-    // init the flight controller
-    struct flight_controller_args *controllerArgs = malloc(sizeof(struct flight_controller_args));
-    controllerArgs->id = 0;
-    controllerArgs->flights = flights;
-    pthread_create(&flight_controller, NULL, flight_controller_main, controllerArgs);
-
     // init controller barrier
     pthread_barrier_init(&barrier_start_1st_phase_checks, NULL,
-                         numOfAgencies + 1); // using Π + 1 due to the extra controller one
+                         numOfAgencies); // using Π
 
     for (unsigned int i = 0; i < A * A; i++) {
         if (i < A) {
@@ -215,15 +208,16 @@ int main(int argc, char *argv[]) {
 
     // wait for controller and agency threads to finish
     for (unsigned int i = 0; i < numOfAgencies; i++) {
-        pthread_join(flight_controller, NULL);
         pthread_join(agencies[i], NULL);
     }
 
-    // agencies have completed their work after this point and we can clean up
-    free(controllerArgs);
-    for (unsigned int i = 0; i < numOfAgencies; i++) {
-        free(agencyArguments[i]);
-    }
+    // init the flight controller
+    struct flight_controller_args *controllerArgs = malloc(sizeof(struct flight_controller_args));
+    controllerArgs->id = 0;
+    controllerArgs->flights = flights;
+    pthread_create(&flight_controller, NULL, flight_controller_main, controllerArgs);
+    pthread_join(flight_controller, NULL);
+
     pthread_barrier_destroy(&barrier_start_1st_phase_checks);
 
     //todo cleanup flights, companies, agencies, etc.

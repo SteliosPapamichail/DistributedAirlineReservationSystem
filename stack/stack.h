@@ -24,8 +24,8 @@ struct stack_reservation {
 struct stack {
     struct stack_reservation *top;
     pthread_mutex_t top_lock;
-    int size; // number of reservations currently stored in the stack
-    int capacity; // maximum number of reservations that can be stored in the stack
+    unsigned int size; // number of reservations currently stored in the stack
+    unsigned int capacity; // maximum number of reservations that can be stored in the stack
 };
 
 struct stack *createStack(int capacity);
