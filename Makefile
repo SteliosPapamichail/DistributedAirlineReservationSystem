@@ -2,13 +2,11 @@ CC = gcc
 CFLAGS = -Wall -Wextra -g
 
 SRCDIR = .
-STACKDIR = ./stack
-QUEUEDIR = ./queue
 BUILDDIR = build
 BINDIR = bin
 
 # Collecting source files from multiple directories
-SOURCES := $(wildcard $(SRCDIR)/*.c) $(wildcard $(SRCDIR)/stack/*.c) $(wildcard $(SRCDIR)/queue/*.c)
+SOURCES := $(wildcard $(SRCDIR)/*.c) $(wildcard $(SRCDIR)/stack/*.c) $(wildcard $(SRCDIR)/queue/*.c $(wildcard $(SRCDIR)/list/*.c))
 OBJECTS := $(patsubst $(SRCDIR)/%,$(BUILDDIR)/%,$(SOURCES:.c=.o))
 EXECUTABLE = $(BINDIR)/main
 

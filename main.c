@@ -17,8 +17,10 @@ unsigned int numOfAgencies = 0;
  */
 unsigned int numOfFlights = 0;
 
+pthread_mutex_t inserter_airlines_lock;
+
 /**
- * Set by the flight controller
+ * Set by the flight controller (shared var)
  */
 unsigned int number_of_inserter_airlines = 0;
 

@@ -8,4 +8,6 @@ add_executable(hy486_project main.c
         stack/stack.h
         queue/queue.c
         queue/queue.h
-        common/reservations.h)
+        common/reservations.h
+        list/lazy_list.c
+        list/lazy_list.h)
