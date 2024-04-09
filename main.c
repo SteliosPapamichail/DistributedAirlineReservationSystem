@@ -5,6 +5,7 @@
 #include "stack/stack.h"
 #include "queue/queue.h"
 #include "common/reservations.h"
+#include "list/lazy_list.h"
 
 
 /**
@@ -17,12 +18,10 @@ unsigned int numOfAgencies = 0;
  */
 unsigned int numOfFlights = 0;
 
-pthread_mutex_t inserter_airlines_lock;
-
 /**
- * Set by the flight controller (shared var)
+ * Will be equal to A companies
  */
-unsigned int number_of_inserter_airlines = 0;
+unsigned int numOfAirlineCompanies = 0;
 
 /**
  * The flight controller responsible for validating flight reservations
@@ -35,6 +34,17 @@ pthread_t flight_controller;
  * the system.
  */
 pthread_barrier_t barrier_start_1st_phase_checks;
+
+/**
+ * Signals that the phase 1 checks have finished and phase 2 can begin.
+ */
+pthread_barrier_t barrier_start_2nd_phase;
+
+/**
+ * Signals that reservation management has finished and the phase 2
+ * checks can begin.
+ */
+pthread_barrier_t barrier_start_2nd_phase_checks;
 
 struct flight_reservations {
     struct stack *completed_reservations;
@@ -62,6 +72,7 @@ struct flight_controller_args {
  */
 void *airline_main(void *args) {
     //TODO:sp
+
     return NULL;
 }
 
@@ -168,7 +179,16 @@ void *flight_controller_main(void *args) {
         pthread_exit((void *) -3);
     }
     printf("Total keysum check passed (expected: %d, found: %d)\n", expectedKeySum, totalKeySum);
-    // all checks passed
+    // all checks passed for phase 1
+
+    // wait for companies to start phase 2
+    pthread_barrier_wait(&barrier_start_2nd_phase);
+
+    //todo:sp implement
+
+    // wait for companies to finish processing reservations before starting phase 2 checks
+    pthread_barrier_wait(&barrier_start_2nd_phase_checks);
+    //todo:sp implement
 
     free(controllerArgs);
     return 0;
@@ -183,14 +203,22 @@ int main(int argc, char *argv[]) {
     // declare the airliner, flights and agency threads
     pthread_t airlineCompanies[A];
     numOfFlights = A;
+    numOfAirlineCompanies = A;
     numOfAgencies = A * A;
     pthread_t agencies[numOfAgencies];
     struct agency_args *agencyArguments[numOfAgencies];
     struct flight_reservations *flights[A]; // reservation i belongs to airline with agency_id (i + 1)
 
-    // init controller barrier
-    pthread_barrier_init(&barrier_start_1st_phase_checks, NULL,
-                         numOfAgencies + 1); // Π agencies plus the controller
+    // init controller barrier for phase 1 checks
+    pthread_barrier_init(&barrier_start_1st_phase_checks, NULL, numOfAgencies + 1); // Π agencies plus the controller
+    // init phase 2 barrier for airline companies and the controller
+    pthread_barrier_init(&barrier_start_2nd_phase, NULL, numOfAirlineCompanies + 1);
+    // init controller barrier for phase 2 checks
+    // airline companies will wait before termination at this barrier and the controller can proceed with the checks after waiting on this barrier
+    pthread_barrier_init(&barrier_start_2nd_phase_checks, NULL, numOfAirlineCompanies + 1);
+
+    // init inserter airlines lock
+    pthread_mutex_init(&inserter_airlines_lock, NULL);
 
     for (int i = 0; i < A * A; i++) {
         if (i < A) {
