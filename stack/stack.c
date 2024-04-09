@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-struct stack *createStack(int capacity) {
+struct stack *createStack(unsigned int capacity) {
     struct stack *newStack = (struct stack *) malloc(sizeof(struct stack));
     if (newStack == NULL) {
         return NULL;
@@ -42,7 +42,7 @@ void push(struct stack *stack, struct Reservation reservation) {
     // Lock the stack before modifying it
     pthread_mutex_lock(&(stack->top_lock));
     stack->top = newNode;
-    stack->size++;
+    stack->size += 1;
     pthread_mutex_unlock(&(stack->top_lock));
 }
 
@@ -58,7 +58,7 @@ struct Reservation pop(struct stack *stack) {
     struct stack_reservation *temp = stack->top;
     struct Reservation reservation = temp->reservation;
     stack->top = temp->next;
-    stack->size--;
+    stack->size -= 1;
     free(temp);
     pthread_mutex_unlock(&(stack->top_lock));
 

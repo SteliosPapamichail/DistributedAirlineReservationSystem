@@ -28,7 +28,7 @@ struct stack {
     unsigned int capacity; // maximum number of reservations that can be stored in the stack
 };
 
-struct stack *createStack(int capacity);
+struct stack *createStack(unsigned int capacity);
 
 bool isStackFull(struct stack *stack);
 
