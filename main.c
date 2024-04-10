@@ -56,13 +56,14 @@ struct agency_args {
     struct flight_reservations *flight;
 };
 
-struct thread_args {
-    unsigned int id;
-};
-
 struct flight_controller_args {
     int id;
     struct flight_reservations **flights;
+};
+
+struct airline_args {
+    struct flight_reservations *flight; // flight for which the company is responsible
+    struct list *management_center;
 };
 
 /**
@@ -71,8 +72,37 @@ struct flight_controller_args {
  * @return
  */
 void *airline_main(void *args) {
-    //TODO:sp
+    // guarantee that phase 2 starts after controller finishes phase 1 checks
+    pthread_barrier_wait(&barrier_start_2nd_phase);
+    // cast back to args
+    struct airline_args *airline_comp_args = (struct airline_args *) args;
+    if (airline_comp_args->flight->pending_reservations->size > 0) { // if company has reservations in queue
+        // move reservations from pending queue to the reservation center
+        struct queue *pending_reservations = airline_comp_args->flight->pending_reservations;
+        while (pending_reservations->size > 0) {
+            struct Reservation reservation = dequeue(pending_reservations);
+            insert(airline_comp_args->management_center, reservation);
+        }
+        // update shared variable for inserter airlines
+        pthread_mutex_lock(&inserter_airlines_lock);
+        number_of_inserter_airlines--;
+        pthread_mutex_unlock(&inserter_airlines_lock);
+    } else if (!isStackFull(
+            airline_comp_args->flight->completed_reservations)) { // if company has no pending reservations and has space on its stack
+        struct stack *completed_reservations = airline_comp_args->flight->completed_reservations;
 
+        // reservation transfers should happen until the stack is either full or the center is empty and inserter == 0
+        while (!isStackFull(completed_reservations) &&
+                (!isListEmpty(airline_comp_args->management_center) || number_of_inserter_airlines != 0)) {
+
+            // move reservation to the stack from the center
+            struct Reservation reservation = removeHead(airline_comp_args->management_center);
+            push(completed_reservations, reservation);
+        }
+
+    }
+    // signal to the controller that checks can start if all airliners have reached this point
+    pthread_barrier_wait(&barrier_start_2nd_phase_checks);
     return NULL;
 }
 
@@ -181,11 +211,8 @@ void *flight_controller_main(void *args) {
     printf("Total keysum check passed (expected: %d, found: %d)\n", expectedKeySum, totalKeySum);
     // all checks passed for phase 1
 
-    // wait for companies to start phase 2
+    // signal to companies to start phase 2
     pthread_barrier_wait(&barrier_start_2nd_phase);
-
-    //todo:sp implement
-
     // wait for companies to finish processing reservations before starting phase 2 checks
     pthread_barrier_wait(&barrier_start_2nd_phase_checks);
     //todo:sp implement
@@ -220,6 +247,9 @@ int main(int argc, char *argv[]) {
     // init inserter airlines lock
     pthread_mutex_init(&inserter_airlines_lock, NULL);
 
+    // create reservation management center
+    struct list *management_center = create_list();
+
     for (int i = 0; i < A * A; i++) {
         if (i < A) {
             // init flight reservations table
@@ -228,6 +258,12 @@ int main(int argc, char *argv[]) {
             unsigned int capacity = (3 / 2) * (A * A) - (A - 1 - i) * A;
             flights[i]->completed_reservations = createStack(capacity);
             flights[i]->pending_reservations = createQueue();
+
+            // init airline companies
+            struct airline_args *airline_comp_args = (struct airline_args *) malloc(sizeof(struct airline_args));
+            airline_comp_args->flight = flights[i];
+            airline_comp_args->management_center = management_center;
+            pthread_create(&(airlineCompanies[i]), NULL, airline_main, airline_comp_args);
         }
         // init agencies
         agencyArguments[i] = malloc(sizeof(struct agency_args));
@@ -249,7 +285,8 @@ int main(int argc, char *argv[]) {
     }
     pthread_join(flight_controller, NULL);
 
-    pthread_barrier_destroy(&barrier_start_1st_phase_checks);
+
 
     //todo cleanup flights, companies, agencies, etc.
+    pthread_barrier_destroy(&barrier_start_1st_phase_checks);
 }

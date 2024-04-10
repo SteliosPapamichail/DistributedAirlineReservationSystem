@@ -9,6 +9,7 @@ struct list *create_list() {
     struct list *list = (struct list *) malloc(sizeof(struct list));
     list->head = NULL;
     list->tail = NULL;
+    list->size = 0;
     return list;
 }
 
@@ -43,6 +44,10 @@ int search(struct list *list, int reservation_number) {
     } else {
         return 0;
     }
+}
+
+int isListEmpty(struct list *list) {
+    return list->size == 0;
 }
 
 /**
@@ -82,6 +87,7 @@ int insert(struct list *list, struct Reservation reservation) {
                 pthread_mutex_init(&node->lock, NULL);
                 node->reservation = reservation;
                 pred->next = node;
+                list->size++;
                 result = 1;
                 return_flag = 1;
             }
@@ -95,6 +101,46 @@ int insert(struct list *list, struct Reservation reservation) {
     }
 }
 
+/**
+ * Removes the first element (lowest reservation number) in the list.
+ * @param list
+ * @return The first list element
+ */
+struct Reservation removeHead(struct list *list) {
+    struct Reservation reservation;
+    if (isListEmpty(list)) {
+        struct Reservation invalid_reservation = {-1, -1};
+        return invalid_reservation;
+    }
+
+    pthread_mutex_lock(&(list->head->lock));
+    // acquiring the tail to cover edge cases
+    /*
+     * i.e. 1) thread1 calls removeHead on a list with two elements
+     * 2) thread2 calls remove with the reservation number of the 2nd element
+     *
+     * thread2 would thus alter the potential new head of the list for thread1
+     */
+    pthread_mutex_lock(&(list->tail->lock));
+
+    reservation = list->head->reservation;
+    struct list_reservation *tmp = list->head;
+    list->head = tmp->next;
+    tmp->next = NULL;
+    list->size--;
+    free(tmp);
+    pthread_mutex_unlock(&(list->head->lock));
+    pthread_mutex_unlock(&(list->tail->lock));
+
+    return reservation;
+}
+
+/**
+ *
+ * @param list
+ * @param reservation_number
+ * @return
+ */
 int delete(struct list *list, int reservation_number) {
     struct list_reservation *pred, *curr;
     int result;
@@ -117,6 +163,7 @@ int delete(struct list *list, int reservation_number) {
                 curr->marked = 1; // mark for lazy deletion
                 pred->next = curr->next; // unlink from the list
                 result = 1;
+                list->size--;
             } else {
                 result = 0;
             }

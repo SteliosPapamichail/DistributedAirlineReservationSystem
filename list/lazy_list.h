@@ -37,15 +37,20 @@ struct list_reservation {
 struct list {
     struct list_reservation *head;
     struct list_reservation *tail;
+    int size;
 };
 
 struct list *create_list();
 
 int validate(struct list_reservation *pred, struct list_reservation *curr);
 
+int isListEmpty(struct list *list);
+
 int search(struct list *list, int reservation_number);
 
 int insert(struct list *list, struct Reservation reservation);
+
+struct Reservation removeHead(struct list *list);
 
 int delete(struct list *list, int reservation_number);
 

@@ -67,11 +67,11 @@ build CMakeFiles/hy486_project.dir/queue/queue.c.o: C_COMPILER__hy486_project_un
   OBJECT_DIR = CMakeFiles/hy486_project.dir
   OBJECT_FILE_DIR = CMakeFiles/hy486_project.dir/queue
 
-build CMakeFiles/hy486_project.dir/flight_manager/flight_manager.c.o: C_COMPILER__hy486_project_unscanned_Debug /home/fresh/CLionProjects/hy486_project/flight_manager/flight_manager.c || cmake_object_order_depends_target_hy486_project
-  DEP_FILE = CMakeFiles/hy486_project.dir/flight_manager/flight_manager.c.o.d
+build CMakeFiles/hy486_project.dir/list/lazy_list.c.o: C_COMPILER__hy486_project_unscanned_Debug /home/fresh/CLionProjects/hy486_project/list/lazy_list.c || cmake_object_order_depends_target_hy486_project
+  DEP_FILE = CMakeFiles/hy486_project.dir/list/lazy_list.c.o.d
   FLAGS = -g -std=gnu11 -fdiagnostics-color=always
   OBJECT_DIR = CMakeFiles/hy486_project.dir
-  OBJECT_FILE_DIR = CMakeFiles/hy486_project.dir/flight_manager
+  OBJECT_FILE_DIR = CMakeFiles/hy486_project.dir/list
 
 
 # =============================================================================
@@ -81,7 +81,7 @@ build CMakeFiles/hy486_project.dir/flight_manager/flight_manager.c.o: C_COMPILER
 #############################################
 # Link the executable hy486_project
 
-build hy486_project: C_EXECUTABLE_LINKER__hy486_project_Debug CMakeFiles/hy486_project.dir/main.c.o CMakeFiles/hy486_project.dir/stack/stack.c.o CMakeFiles/hy486_project.dir/queue/queue.c.o CMakeFiles/hy486_project.dir/flight_manager/flight_manager.c.o
+build hy486_project: C_EXECUTABLE_LINKER__hy486_project_Debug CMakeFiles/hy486_project.dir/main.c.o CMakeFiles/hy486_project.dir/stack/stack.c.o CMakeFiles/hy486_project.dir/queue/queue.c.o CMakeFiles/hy486_project.dir/list/lazy_list.c.o
   FLAGS = -g
   OBJECT_DIR = CMakeFiles/hy486_project.dir
   POST_BUILD = :
