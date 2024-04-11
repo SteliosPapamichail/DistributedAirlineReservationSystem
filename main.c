@@ -59,6 +59,7 @@ struct agency_args {
 struct flight_controller_args {
     int id;
     struct flight_reservations **flights;
+    struct list *management_center;
 };
 
 struct airline_args {
@@ -93,7 +94,7 @@ void *airline_main(void *args) {
 
         // reservation transfers should happen until the stack is either full or the center is empty and inserter == 0
         while (!isStackFull(completed_reservations) &&
-                (!isListEmpty(airline_comp_args->management_center) || number_of_inserter_airlines != 0)) {
+               (!isListEmpty(airline_comp_args->management_center) || number_of_inserter_airlines != 0)) {
 
             // move reservation to the stack from the center
             struct Reservation reservation = removeHead(airline_comp_args->management_center);
@@ -134,34 +135,49 @@ void *agency_main(void *args) {
     return NULL;
 }
 
-void *flight_controller_main(void *args) {
-    pthread_barrier_wait(&barrier_start_1st_phase_checks); // wait for agencies
-    struct flight_controller_args *controllerArgs = (struct flight_controller_args *) args;// cast to controller args
-    // check-related vars
-    unsigned int totalReservations = 0;
-    unsigned int expectedTotalReservations = pow(numOfFlights, 3);
-    unsigned int totalKeySum = 0;
-    unsigned int expectedKeySum = (((pow(numOfFlights, 6)) + (pow(numOfFlights, 3))) / 2); // (A^6 + A^3) / 2
-
-    // start checks and check-related calculations
+int check_stack_overflow(struct flight_reservations **flights) {
     for (unsigned int i = 0; i < numOfFlights; i++) {
-        struct stack *completedReservations = controllerArgs->flights[i]->completed_reservations;
-        struct queue *pendingReservations = controllerArgs->flights[i]->pending_reservations;
+        struct stack *completedReservations = flights[i]->completed_reservations;
 
-        // check #1: stack overflow
         if (hasStackOverflowed(completedReservations)) {
             // log the error and exit
             printf("Flight %d: stack has overflowed! Check failed (capacity: %u, found: %u)\n", i,
                    completedReservations->capacity,
                    completedReservations->size);
-            pthread_exit((void *) -1); //todo:sp revisit so that the program exits but cleans up first
+            return 0;
+        } else {
+            printf("Flight %d: stack overflow check passed (capacity: %u, found: %u)\n", i,
+                   completedReservations->capacity,
+                   completedReservations->size);
         }
-        printf("Flight %d: stack overflow check passed (capacity: %u, found: %u)\n", i,
-               completedReservations->capacity,
-               completedReservations->size);
-        // check #2: total size
+    }
+    return 1;
+}
+
+int check_total_size(struct flight_reservations **flights) {
+    unsigned int totalReservations = 0;
+    unsigned int expectedTotalReservations = pow(numOfFlights, 3);
+    for (unsigned int i = 0; i < numOfFlights; i++) {
+        struct stack *completedReservations = flights[i]->completed_reservations;
+        struct queue *pendingReservations = flights[i]->pending_reservations;
         totalReservations += completedReservations->size + pendingReservations->size;
-        // check #3: total keysum
+    }
+    int result = totalReservations == expectedTotalReservations;
+    if (!result) {
+        printf("Total size check failed (expected: %d, found: %d)\n", expectedTotalReservations, totalReservations);
+    } else {
+        printf("Total size check passed (expected: %d, found: %d)\n", expectedTotalReservations, totalReservations);
+    }
+    return result;
+}
+
+int check_total_keysum(struct flight_reservations **flights) {
+    unsigned int totalKeySum = 0;
+    unsigned int expectedKeySum = (((pow(numOfFlights, 6)) + (pow(numOfFlights, 3))) / 2); // (A^6 + A^3) / 2
+    for (unsigned int i = 0; i < numOfFlights; i++) {
+        struct stack *completedReservations = flights[i]->completed_reservations;
+        struct queue *pendingReservations = flights[i]->pending_reservations;
+
         // traverse the stack and sum the reservation numbers
         struct stack_reservation *currentStackNode = completedReservations->top;
         // lock to ensure thread safety
@@ -196,26 +212,64 @@ void *flight_controller_main(void *args) {
 
         }
     }
-    // check #2: total size
-    if (totalReservations != expectedTotalReservations) {
-        printf("Total size check failed (expected: %d, found: %d)\n", expectedTotalReservations, totalReservations);
-        pthread_exit((void *) -2);
-    }
-    printf("Total size check passed (expected: %d, found: %d)\n", expectedTotalReservations, totalReservations);
 
-    // check #3: Total keysum
-    if (totalKeySum != expectedKeySum) {
+    int result = totalKeySum == expectedKeySum;
+    if (!result) {
         printf("Total keysum check failed (expected: %d, found %d)\n", expectedKeySum, totalKeySum);
-        pthread_exit((void *) -3);
+    } else {
+        printf("Total keysum check passed (expected: %d, found: %d)\n", expectedKeySum, totalKeySum);
     }
-    printf("Total keysum check passed (expected: %d, found: %d)\n", expectedKeySum, totalKeySum);
-    // all checks passed for phase 1
+    return result;
+}
+
+int reservations_completion_check(struct flight_reservations **flights, struct list *management_center) {
+    int result = 1;
+    if (!isListEmpty(management_center)) {
+        printf("Reservations center was not empty!\n");
+        result = 0;
+    } else if (number_of_inserter_airlines != 0) {
+        printf("Number of inserter airlines was not zero!\n");
+        result = 0;
+    } else {
+        // check all queues
+        for (int i = 0; i < numOfFlights; i++) {
+            struct queue *pendingReservations = flights[i]->pending_reservations;
+            if (pendingReservations->size != 0) {
+                printf("Found non empty pending reservations queue for flight #%d\n", i);
+                result = 0;
+            }
+        }
+    }
+    if (result) printf("Reservations completion check passed\n");
+    return result;
+}
+
+void *flight_controller_main(void *args) {
+    pthread_barrier_wait(&barrier_start_1st_phase_checks); // wait for agencies
+    struct flight_controller_args *controllerArgs = (struct flight_controller_args *) args;// cast to controller args
+
+    // start phase A checks
+    if (!check_stack_overflow(controllerArgs->flights)
+        || !check_total_size(controllerArgs->flights) || !check_total_keysum(controllerArgs->flights)) {
+        pthread_exit((void *) -1);
+    }
+
+    // --- all checks passed for phase 1 ---
 
     // signal to companies to start phase 2
     pthread_barrier_wait(&barrier_start_2nd_phase);
     // wait for companies to finish processing reservations before starting phase 2 checks
     pthread_barrier_wait(&barrier_start_2nd_phase_checks);
-    //todo:sp implement
+    // reservations completion check
+
+    // repeat phase A checks and phase B check
+    if (!check_stack_overflow(controllerArgs->flights)
+        || !check_total_size(controllerArgs->flights) || !check_total_keysum(controllerArgs->flights)
+        || !reservations_completion_check(controllerArgs->flights, controllerArgs->management_center)) {
+        pthread_exit((void *) -1);
+    }
+
+    // --- all checks passed for phase 2 ---
 
     free(controllerArgs);
     return 0;
@@ -277,6 +331,7 @@ int main(int argc, char *argv[]) {
     struct flight_controller_args *controllerArgs = malloc(sizeof(struct flight_controller_args));
     controllerArgs->id = 0;
     controllerArgs->flights = flights;
+    controllerArgs->management_center = management_center;
     pthread_create(&flight_controller, NULL, flight_controller_main, controllerArgs);
 
     // wait for controller and agency threads to finish
