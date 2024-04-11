@@ -5,6 +5,7 @@
 #include <malloc.h>
 #include "lazy_list.h"
 
+
 struct list *create_list() {
     struct list *list = (struct list *) malloc(sizeof(struct list));
     list->head = NULL;
@@ -57,20 +58,63 @@ int isListEmpty(struct list *list) {
  * @return 1 on success, 0 otherwise
  */
 int insert(struct list *list, struct Reservation reservation) {
-    struct list_reservation *pred, *curr;
+    struct list_reservation *pred = list->head;
+    struct list_reservation *curr;
     int result;
     int return_flag = 0;
 
-    while (1) {
-        pred = list->head;
-        curr = pred->next;
-
-        // traverse until a suitable position
-        while (curr->reservation.reservation_number < reservation.reservation_number) {
-            pred = curr;
-            curr = pred->next;
+    // Check for empty list (pred is NULL)
+    if (pred == NULL) {
+        // Allocate memory for the first node
+        curr = (struct list_reservation *) malloc(sizeof(struct list_reservation));
+        if (curr == NULL) {
+            return -1; // Handle allocation failure
         }
+        curr->next = NULL;
+        curr->marked = 0;
+        pthread_mutex_init(&curr->lock, NULL);
+        curr->reservation = reservation;
 
+        pthread_mutex_lock(&curr->lock);
+        list->head = curr;
+        list->size++;
+        pthread_mutex_unlock(&curr->lock);
+
+        return 1;
+    }
+
+    if(pred->next == NULL) { // list has only one element
+        // Allocate memory for the second node
+        curr = (struct list_reservation *) malloc(sizeof(struct list_reservation));
+        if (curr == NULL) {
+            return -1; // Handle allocation failure
+        }
+        curr->marked = 0;
+        pthread_mutex_init(&curr->lock, NULL);
+        curr->reservation = reservation;
+
+        pthread_mutex_lock(&pred->lock);
+        pthread_mutex_lock(&curr->lock);
+
+        // preserve sorting order
+        if(pred->reservation.reservation_number < curr->reservation.reservation_number) {
+            pred->next = curr;
+            curr->next = NULL;
+        } else { // swap positions
+            list->head = curr;
+            curr->next = pred;
+            pred->next = NULL;
+        }
+        list->size++;
+        pthread_mutex_unlock(&curr->lock);
+        pthread_mutex_unlock(&pred->lock);
+
+        return 1;
+    }
+
+    curr = pred->next;
+
+    while (curr != NULL && curr->reservation.reservation_number < reservation.reservation_number) {
         // lock both nodes for potential insertion
         pthread_mutex_lock(&pred->lock);
         pthread_mutex_lock(&curr->lock);
@@ -98,7 +142,13 @@ int insert(struct list *list, struct Reservation reservation) {
         pthread_mutex_unlock(&pred->lock);
 
         if (return_flag) return result;
+
+        // traverse until a suitable position
+        pred = curr;
+        curr = pred->next;
     }
+
+    return 0;
 }
 
 /**

@@ -8,6 +8,14 @@
 #include "list/lazy_list.h"
 
 
+pthread_mutex_t inserter_airlines_lock;
+
+/**
+ * Set by the flight controller (shared var)
+ */
+unsigned int number_of_inserter_airlines;
+
+
 /**
  * Will be equal to A^2 agencies
  */
@@ -154,9 +162,9 @@ int check_stack_overflow(struct flight_reservations **flights) {
     return 1;
 }
 
-int check_total_size(struct flight_reservations **flights) {
+int check_total_size(struct flight_reservations **flights, unsigned int expectedTotalReservations) {
     unsigned int totalReservations = 0;
-    unsigned int expectedTotalReservations = pow(numOfFlights, 3);
+
     for (unsigned int i = 0; i < numOfFlights; i++) {
         struct stack *completedReservations = flights[i]->completed_reservations;
         struct queue *pendingReservations = flights[i]->pending_reservations;
@@ -171,9 +179,9 @@ int check_total_size(struct flight_reservations **flights) {
     return result;
 }
 
-int check_total_keysum(struct flight_reservations **flights) {
-    unsigned int totalKeySum = 0;
-    unsigned int expectedKeySum = (((pow(numOfFlights, 6)) + (pow(numOfFlights, 3))) / 2); // (A^6 + A^3) / 2
+int check_total_keysum(struct flight_reservations **flights, struct list *management_center) {
+    unsigned long totalKeySum = 0;
+    unsigned long expectedKeySum = (((pow(numOfFlights, 6)) + (pow(numOfFlights, 3))) / 2); // (A^6 + A^3) / 2
     for (unsigned int i = 0; i < numOfFlights; i++) {
         struct stack *completedReservations = flights[i]->completed_reservations;
         struct queue *pendingReservations = flights[i]->pending_reservations;
@@ -213,11 +221,24 @@ int check_total_keysum(struct flight_reservations **flights) {
         }
     }
 
+    if (management_center != NULL) { // if provided, means we are doing phase B checks
+        pthread_mutex_lock(&management_center->head->lock);
+        pthread_mutex_lock(&management_center->tail->lock);
+        // traverse the list and sum keys
+        struct list_reservation* curr = management_center->head;
+        while(curr != NULL) {
+            totalKeySum += curr->reservation.reservation_number;
+            curr = curr->next;
+        }
+        pthread_mutex_unlock(&management_center->tail->lock);
+        pthread_mutex_unlock(&management_center->head->lock);
+    }
+
     int result = totalKeySum == expectedKeySum;
     if (!result) {
-        printf("Total keysum check failed (expected: %d, found %d)\n", expectedKeySum, totalKeySum);
+        printf("Total keysum check failed (expected: %lu, found %lu)\n", expectedKeySum, totalKeySum);
     } else {
-        printf("Total keysum check passed (expected: %d, found: %d)\n", expectedKeySum, totalKeySum);
+        printf("Total keysum check passed (expected: %lu, found: %lu)\n", expectedKeySum, totalKeySum);
     }
     return result;
 }
@@ -250,11 +271,14 @@ void *flight_controller_main(void *args) {
 
     // start phase A checks
     if (!check_stack_overflow(controllerArgs->flights)
-        || !check_total_size(controllerArgs->flights) || !check_total_keysum(controllerArgs->flights)) {
+        || !check_total_size(controllerArgs->flights, pow(numOfFlights, 3)) ||
+        !check_total_keysum(controllerArgs->flights, NULL)) {
         pthread_exit((void *) -1);
     }
 
     // --- all checks passed for phase 1 ---
+
+    printf("\n\n---------- Phase Switch ----------\n\n");
 
     // signal to companies to start phase 2
     pthread_barrier_wait(&barrier_start_2nd_phase);
@@ -263,8 +287,10 @@ void *flight_controller_main(void *args) {
     // reservations completion check
 
     // repeat phase A checks and phase B check
+    // for the total size check we must subtract the number of reservations currently in the management center
     if (!check_stack_overflow(controllerArgs->flights)
-        || !check_total_size(controllerArgs->flights) || !check_total_keysum(controllerArgs->flights)
+        || !check_total_size(controllerArgs->flights, pow(numOfFlights, 3) - controllerArgs->management_center->size) ||
+        !check_total_keysum(controllerArgs->flights, controllerArgs->management_center)
         || !reservations_completion_check(controllerArgs->flights, controllerArgs->management_center)) {
         pthread_exit((void *) -1);
     }
@@ -338,9 +364,10 @@ int main(int argc, char *argv[]) {
     for (unsigned int i = 0; i < numOfAgencies; i++) {
         pthread_join(agencies[i], NULL);
     }
+    for (unsigned int i = 0; i < numOfAirlineCompanies; i++) {
+        pthread_join(airlineCompanies[i], NULL);
+    }
     pthread_join(flight_controller, NULL);
-
-
 
     //todo cleanup flights, companies, agencies, etc.
     pthread_barrier_destroy(&barrier_start_1st_phase_checks);

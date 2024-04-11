@@ -8,13 +8,6 @@
 #include <pthread.h>
 #include "../common/reservations.h"
 
-pthread_mutex_t inserter_airlines_lock;
-
-/**
- * Set by the flight controller (shared var)
- */
-unsigned int number_of_inserter_airlines = 0;
-
 /**
  * Lazy Synchronization
 • “Postpone the hard work for later”: removing an element of a data structure can
