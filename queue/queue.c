@@ -60,7 +60,7 @@ struct Reservation dequeue(struct queue *queue) {
     if (queue->head->next == NULL) {
         pthread_mutex_unlock(&(queue->head_lock));
         //todo: maybe return an error code in order to satisfy totality (slide 2 - lec 5)
-        return (struct Reservation) {0};
+        return (struct Reservation) {-1, -1};
     }
 
     // Move head pointer (atomicity not crucial here)

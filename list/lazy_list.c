@@ -21,30 +21,39 @@ struct list *create_list() {
  * @return 1 if valid, 0 if invalid
  */
 int validate(struct list_reservation *pred, struct list_reservation *curr) {
-    if (!pred->marked && !curr->marked && pred->next == curr) {
+    if (pred != NULL && curr != NULL && !pred->marked && !curr->marked && pred->next == curr) {
         return 1;
     } else {
         return 0;
     }
 }
 
-/**
- *
- * @param reservation_number
- * @return  1 if found and not marked, 0 otherwise
- */
-int search(struct list *list, int reservation_number) {
-    struct list_reservation *curr = list->head;
+int searchReservation(struct list *list, int reservation_number) {
 
-    while (curr->reservation.reservation_number < reservation_number) {
-        curr = curr->next;
+    struct list_reservation *current = list->head;
+
+    while (current != NULL) {
+        pthread_mutex_lock(&current->lock);
+        if (current->reservation.reservation_number == reservation_number) {
+            pthread_mutex_unlock(&current->lock);
+            return 1;
+        }
+        pthread_mutex_unlock(&current->lock);
+        current = current->next;
     }
 
-    if (!curr->marked && curr->reservation.reservation_number == reservation_number) {
-        return 1;
-    } else {
-        return 0;
+    return 0;
+}
+
+void printList(struct list *list) {
+    struct list_reservation *current = list->head;
+    while (current != NULL) {
+        pthread_mutex_lock(&current->lock);
+        printf("Reservation in center with id : %d -> ", current->reservation.reservation_number);
+        pthread_mutex_unlock(&current->lock);
+        current = current->next;
     }
+    printf("NULL\n");
 }
 
 int isListEmpty(struct list *list) {
@@ -58,97 +67,47 @@ int isListEmpty(struct list *list) {
  * @return 1 on success, 0 otherwise
  */
 int insert(struct list *list, struct Reservation reservation) {
-    struct list_reservation *pred = list->head;
-    struct list_reservation *curr;
-    int result;
-    int return_flag = 0;
+    struct list_reservation *new_node = (struct list_reservation *) malloc(sizeof(struct list_reservation));
+    if (!new_node) return 0;
+    new_node->reservation = reservation;
+    new_node->marked = 0;
+    pthread_mutex_init(&new_node->lock, NULL);
+    new_node->next = NULL;
 
-    // Check for empty list (pred is NULL)
-    if (pred == NULL) {
-        // Allocate memory for the first node
-        curr = (struct list_reservation *) malloc(sizeof(struct list_reservation));
-        if (curr == NULL) {
-            return -1; // Handle allocation failure
-        }
-        curr->next = NULL;
-        curr->marked = 0;
-        pthread_mutex_init(&curr->lock, NULL);
-        curr->reservation = reservation;
+    pthread_mutex_lock(&new_node->lock);
 
-        pthread_mutex_lock(&curr->lock);
-        list->head = curr;
+    if (list->head == NULL) { // list is empty
+        list->head = new_node;
+        list->tail = new_node;
         list->size++;
-        pthread_mutex_unlock(&curr->lock);
-
+        pthread_mutex_unlock(&new_node->lock);
         return 1;
     }
 
-    if(pred->next == NULL) { // list has only one element
-        // Allocate memory for the second node
-        curr = (struct list_reservation *) malloc(sizeof(struct list_reservation));
-        if (curr == NULL) {
-            return -1; // Handle allocation failure
-        }
-        curr->marked = 0;
-        pthread_mutex_init(&curr->lock, NULL);
-        curr->reservation = reservation;
+    struct list_reservation *current = list->head;
+    struct list_reservation *previous = NULL;
 
-        pthread_mutex_lock(&pred->lock);
-        pthread_mutex_lock(&curr->lock);
-
-        // preserve sorting order
-        if(pred->reservation.reservation_number < curr->reservation.reservation_number) {
-            pred->next = curr;
-            curr->next = NULL;
-        } else { // swap positions
-            list->head = curr;
-            curr->next = pred;
-            pred->next = NULL;
-        }
-        list->size++;
-        pthread_mutex_unlock(&curr->lock);
-        pthread_mutex_unlock(&pred->lock);
-
-        return 1;
+    // find sorted position
+    while (current != NULL && current->reservation.reservation_number < reservation.reservation_number) {
+        previous = current;
+        current = current->next;
     }
 
-    curr = pred->next;
-
-    while (curr != NULL && curr->reservation.reservation_number < reservation.reservation_number) {
-        // lock both nodes for potential insertion
-        pthread_mutex_lock(&pred->lock);
-        pthread_mutex_lock(&curr->lock);
-
-        if (validate(pred, curr)) {
-            // flight with this number already exists, abort
-            if (reservation.reservation_number == curr->reservation.reservation_number) {
-                result = 0;
-                return_flag = 1;
-            } else {
-                // proceed with insertion
-                struct list_reservation *node = (struct list_reservation *) malloc(sizeof(struct list_reservation));
-                node->next = curr;
-                pthread_mutex_init(&node->lock, NULL);
-                node->reservation = reservation;
-                pred->next = node;
-                list->size++;
-                result = 1;
-                return_flag = 1;
-            }
-        }
-
-        // release locks
-        pthread_mutex_unlock(&curr->lock);
-        pthread_mutex_unlock(&pred->lock);
-
-        if (return_flag) return result;
-
-        // traverse until a suitable position
-        pred = curr;
-        curr = pred->next;
+    if (previous == NULL) { // Insert at the beginning
+        new_node->next = list->head;
+        list->head = new_node;
+    } else { // Insert in sorted position
+        previous->next = new_node;
+        new_node->next = current;
+        if (current == NULL)
+            list->tail = new_node;
     }
 
-    return 0;
+    list->size++;
+
+    pthread_mutex_unlock(&new_node->lock);
+
+    return 1;
 }
 
 /**
@@ -157,71 +116,26 @@ int insert(struct list *list, struct Reservation reservation) {
  * @return The first list element
  */
 struct Reservation removeHead(struct list *list) {
-    struct Reservation reservation;
-    if (isListEmpty(list)) {
-        struct Reservation invalid_reservation = {-1, -1};
-        return invalid_reservation;
+    pthread_mutex_lock(&list->head->lock);
+    struct Reservation removed_reservation;
+
+    if (list->head != NULL) {
+        struct list_reservation *temp = list->head;
+        removed_reservation = temp->reservation;
+
+        list->head = list->head->next;
+        free(temp);
+
+        list->size--;
+
+        if (list->head == NULL) {
+            list->tail = NULL;
+        }
+    } else {
+        // list was empty
+        removed_reservation.reservation_number = -1;
     }
 
-    pthread_mutex_lock(&(list->head->lock));
-    // acquiring the tail to cover edge cases
-    /*
-     * i.e. 1) thread1 calls removeHead on a list with two elements
-     * 2) thread2 calls remove with the reservation number of the 2nd element
-     *
-     * thread2 would thus alter the potential new head of the list for thread1
-     */
-    pthread_mutex_lock(&(list->tail->lock));
-
-    reservation = list->head->reservation;
-    struct list_reservation *tmp = list->head;
-    list->head = tmp->next;
-    tmp->next = NULL;
-    list->size--;
-    free(tmp);
-    pthread_mutex_unlock(&(list->head->lock));
-    pthread_mutex_unlock(&(list->tail->lock));
-
-    return reservation;
-}
-
-/**
- *
- * @param list
- * @param reservation_number
- * @return
- */
-int delete(struct list *list, int reservation_number) {
-    struct list_reservation *pred, *curr;
-    int result;
-    int return_flag = 0;
-
-    // similar logic to insert for the most part
-    while (1) {
-        pred = list->head;
-        curr = pred->next;
-        while (curr->reservation.reservation_number < reservation_number) {
-            pred = curr;
-            curr = curr->next;
-        }
-
-        pthread_mutex_lock(&pred->lock);
-        pthread_mutex_lock(&curr->lock);
-
-        if (validate(pred, curr)) {
-            if (curr->reservation.reservation_number == reservation_number) {
-                curr->marked = 1; // mark for lazy deletion
-                pred->next = curr->next; // unlink from the list
-                result = 1;
-                list->size--;
-            } else {
-                result = 0;
-            }
-            return_flag = 1;
-        }
-        pthread_mutex_unlock(&curr->lock);
-        pthread_mutex_unlock(&pred->lock);
-
-        if (return_flag) return result;
-    }
+    pthread_mutex_unlock(&list->head->lock);
+    return removed_reservation;
 }

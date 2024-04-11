@@ -35,16 +35,16 @@ struct list {
 
 struct list *create_list();
 
+void printList(struct list* list);
+
+int searchReservation(struct list* list, int flight_number);
+
 int validate(struct list_reservation *pred, struct list_reservation *curr);
 
 int isListEmpty(struct list *list);
 
-int search(struct list *list, int reservation_number);
-
 int insert(struct list *list, struct Reservation reservation);
 
 struct Reservation removeHead(struct list *list);
-
-int delete(struct list *list, int reservation_number);
 
 #endif //HY486_PROJECT_LAZY_LIST_H

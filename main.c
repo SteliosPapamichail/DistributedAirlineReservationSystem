@@ -75,6 +75,8 @@ struct airline_args {
     struct list *management_center;
 };
 
+pthread_mutex_t center_lock;
+
 /**
  * The code to run when an airline company thread is spawned
  * @param args
@@ -90,7 +92,9 @@ void *airline_main(void *args) {
         struct queue *pending_reservations = airline_comp_args->flight->pending_reservations;
         while (pending_reservations->size > 0) {
             struct Reservation reservation = dequeue(pending_reservations);
-            insert(airline_comp_args->management_center, reservation);
+            if (reservation.reservation_number != -1) {
+                insert(airline_comp_args->management_center, reservation);
+            }
         }
         // update shared variable for inserter airlines
         pthread_mutex_lock(&inserter_airlines_lock);
@@ -106,7 +110,7 @@ void *airline_main(void *args) {
 
             // move reservation to the stack from the center
             struct Reservation reservation = removeHead(airline_comp_args->management_center);
-            push(completed_reservations, reservation);
+            if (reservation.reservation_number != -1) push(completed_reservations, reservation);
         }
 
     }
@@ -225,8 +229,8 @@ int check_total_keysum(struct flight_reservations **flights, struct list *manage
         pthread_mutex_lock(&management_center->head->lock);
         pthread_mutex_lock(&management_center->tail->lock);
         // traverse the list and sum keys
-        struct list_reservation* curr = management_center->head;
-        while(curr != NULL) {
+        struct list_reservation *curr = management_center->head;
+        while (curr != NULL) {
             totalKeySum += curr->reservation.reservation_number;
             curr = curr->next;
         }
@@ -280,12 +284,12 @@ void *flight_controller_main(void *args) {
 
     printf("\n\n---------- Phase Switch ----------\n\n");
 
+
+
     // signal to companies to start phase 2
     pthread_barrier_wait(&barrier_start_2nd_phase);
     // wait for companies to finish processing reservations before starting phase 2 checks
     pthread_barrier_wait(&barrier_start_2nd_phase_checks);
-    // reservations completion check
-
     // repeat phase A checks and phase B check
     // for the total size check we must subtract the number of reservations currently in the management center
     if (!check_stack_overflow(controllerArgs->flights)
@@ -359,6 +363,8 @@ int main(int argc, char *argv[]) {
     controllerArgs->flights = flights;
     controllerArgs->management_center = management_center;
     pthread_create(&flight_controller, NULL, flight_controller_main, controllerArgs);
+
+    pthread_mutex_init(&center_lock, NULL);
 
     // wait for controller and agency threads to finish
     for (unsigned int i = 0; i < numOfAgencies; i++) {

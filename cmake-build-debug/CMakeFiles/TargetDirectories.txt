@@ -1,3 +1,3 @@
-/home/fresh/CLionProjects/DistributedAirlineReservationSystem/cmake-build-debug/CMakeFiles/hy486_project.dir
-/home/fresh/CLionProjects/DistributedAirlineReservationSystem/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/fresh/CLionProjects/DistributedAirlineReservationSystem/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/fresh/CLionProjects/hy486_project/cmake-build-debug/CMakeFiles/hy486_project.dir
+/home/fresh/CLionProjects/hy486_project/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/fresh/CLionProjects/hy486_project/cmake-build-debug/CMakeFiles/rebuild_cache.dir
