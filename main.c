@@ -109,7 +109,9 @@ void *airline_main(void *args) {
                (!isListEmpty(airline_comp_args->management_center) || number_of_inserter_airlines != 0)) {
 
             // move reservation to the stack from the center
-            struct Reservation reservation = removeHead(airline_comp_args->management_center);
+            printf("List before delete has size %d\n", airline_comp_args->management_center->size);
+            struct Reservation reservation = deleteAndGet(airline_comp_args->management_center);
+            printf("List after delete has size %d\n", airline_comp_args->management_center->size);
             if (reservation.reservation_number != -1) push(completed_reservations, reservation);
         }
 
@@ -166,8 +168,9 @@ int check_stack_overflow(struct flight_reservations **flights) {
     return 1;
 }
 
-int check_total_size(struct flight_reservations **flights, unsigned int expectedTotalReservations) {
+int check_total_size(struct flight_reservations **flights) {
     unsigned int totalReservations = 0;
+    unsigned int expectedTotalReservations = pow(numOfFlights, 3);
 
     for (unsigned int i = 0; i < numOfFlights; i++) {
         struct stack *completedReservations = flights[i]->completed_reservations;
@@ -183,7 +186,7 @@ int check_total_size(struct flight_reservations **flights, unsigned int expected
     return result;
 }
 
-int check_total_keysum(struct flight_reservations **flights, struct list *management_center) {
+int check_total_keysum(struct flight_reservations **flights) {
     unsigned long totalKeySum = 0;
     unsigned long expectedKeySum = (((pow(numOfFlights, 6)) + (pow(numOfFlights, 3))) / 2); // (A^6 + A^3) / 2
     for (unsigned int i = 0; i < numOfFlights; i++) {
@@ -225,19 +228,6 @@ int check_total_keysum(struct flight_reservations **flights, struct list *manage
         }
     }
 
-    if (management_center != NULL) { // if provided, means we are doing phase B checks
-        pthread_mutex_lock(&management_center->head->lock);
-        pthread_mutex_lock(&management_center->tail->lock);
-        // traverse the list and sum keys
-        struct list_reservation *curr = management_center->head;
-        while (curr != NULL) {
-            totalKeySum += curr->reservation.reservation_number;
-            curr = curr->next;
-        }
-        pthread_mutex_unlock(&management_center->tail->lock);
-        pthread_mutex_unlock(&management_center->head->lock);
-    }
-
     int result = totalKeySum == expectedKeySum;
     if (!result) {
         printf("Total keysum check failed (expected: %lu, found %lu)\n", expectedKeySum, totalKeySum);
@@ -275,16 +265,14 @@ void *flight_controller_main(void *args) {
 
     // start phase A checks
     if (!check_stack_overflow(controllerArgs->flights)
-        || !check_total_size(controllerArgs->flights, pow(numOfFlights, 3)) ||
-        !check_total_keysum(controllerArgs->flights, NULL)) {
+        || !check_total_size(controllerArgs->flights) ||
+        !check_total_keysum(controllerArgs->flights)) {
         pthread_exit((void *) -1);
     }
 
     // --- all checks passed for phase 1 ---
 
-    printf("\n\n---------- Phase Switch ----------\n\n");
-
-
+    printf("\n---------- Phase Switch ----------\n\n");
 
     // signal to companies to start phase 2
     pthread_barrier_wait(&barrier_start_2nd_phase);
@@ -293,8 +281,8 @@ void *flight_controller_main(void *args) {
     // repeat phase A checks and phase B check
     // for the total size check we must subtract the number of reservations currently in the management center
     if (!check_stack_overflow(controllerArgs->flights)
-        || !check_total_size(controllerArgs->flights, pow(numOfFlights, 3) - controllerArgs->management_center->size) ||
-        !check_total_keysum(controllerArgs->flights, controllerArgs->management_center)
+        || !check_total_size(controllerArgs->flights) ||
+        !check_total_keysum(controllerArgs->flights)
         || !reservations_completion_check(controllerArgs->flights, controllerArgs->management_center)) {
         pthread_exit((void *) -1);
     }
@@ -339,7 +327,7 @@ int main(int argc, char *argv[]) {
             // init flight reservations table
             flights[i] = (struct flight_reservations *) malloc(sizeof(struct flight_reservations));
             // stack capacity depends on the flight's position in the table
-            unsigned int capacity = (3 / 2) * (A * A) - (A - 1 - i) * A;
+            unsigned int capacity = 1.5f * (A * A) - (A - 1 - i) * A;
             flights[i]->completed_reservations = createStack(capacity);
             flights[i]->pending_reservations = createQueue();
 

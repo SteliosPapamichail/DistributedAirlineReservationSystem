@@ -1,5 +1,5 @@
 //
-// Created by fresh on 4/10/24.
+// Created by stelios papamichail csd4020 on 4/10/24.
 //
 
 #ifndef HY486_PROJECT_LAZY_LIST_H
@@ -45,6 +45,6 @@ int isListEmpty(struct list *list);
 
 int insert(struct list *list, struct Reservation reservation);
 
-struct Reservation removeHead(struct list *list);
+struct Reservation deleteAndGet(struct list *list);
 
 #endif //HY486_PROJECT_LAZY_LIST_H
