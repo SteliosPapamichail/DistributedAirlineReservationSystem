@@ -75,26 +75,16 @@ struct Reservation dequeue(struct queue *queue) {
 }
 
 void destroyQueue(struct queue *queue) {
-    if (queue == NULL) {
-        return;
-    }
+    struct queue_reservation *node = queue->head->next;
 
-    // Acquire both locks to ensure proper cleanup
-    pthread_mutex_lock(&(queue->head_lock));
-    pthread_mutex_lock(&(queue->tail_lock));
-
-    // Free nodes starting from head->next (skip dummy node)
-    struct queue_reservation *current = queue->head->next;
-    while (current != NULL) {
-        struct queue_reservation *temp = current;
-        current = current->next;
+    while (node != NULL) {
+        struct queue_reservation *temp = node;
+        node = node->next;
         free(temp);
     }
 
-    // Free dummy nodes and destroy locks
     free(queue->head);
-    free(queue->tail);
-    pthread_mutex_destroy(&(queue->head_lock));
-    pthread_mutex_destroy(&(queue->tail_lock));
+    pthread_mutex_destroy(&queue->tail_lock);
+    pthread_mutex_destroy(&queue->head_lock);
     free(queue);
 }

@@ -10,4 +10,13 @@ struct Reservation {
     int reservation_number;
 };
 
+/**
+ * Represents a flight's reservations (completed & pending)
+ */
+struct flight_reservations {
+    struct stack *completed_reservations;
+    struct queue *pending_reservations;
+};
+
+
 #endif //HY486_PROJECT_RESERVATIONS_H

@@ -17,7 +17,6 @@ struct list *create_list() {
     list->tail->reservation.reservation_number = -1;
     pthread_mutex_init(&list->tail->lock, NULL);
     list->head->next = list->tail;
-    list->size = 0;
     return list;
 }
 
@@ -35,13 +34,10 @@ int searchReservation(struct list *list, int reservation_number) {
 
     struct list_reservation *current = list->head;
 
-    while (current != NULL) {
-        pthread_mutex_lock(&current->lock);
+    while (current != list->tail) {
         if (current->reservation.reservation_number == reservation_number) {
-            pthread_mutex_unlock(&current->lock);
             return 1;
         }
-        pthread_mutex_unlock(&current->lock);
         current = current->next;
     }
 
@@ -49,18 +45,16 @@ int searchReservation(struct list *list, int reservation_number) {
 }
 
 void printList(struct list *list) {
-    pthread_mutex_lock(&list->head->lock);
     struct list_reservation *current = list->head->next; // head is sentinel
     while (current != list->tail) {
         printf("Reservation in center with id : %d -> ", current->reservation.reservation_number);
         current = current->next;
     }
-    pthread_mutex_unlock(&list->head->lock);
     printf("NULL\n");
 }
 
 int isListEmpty(struct list *list) {
-    return list->size == 0;
+    return list->head->next == list->tail;
 }
 
 
@@ -94,7 +88,6 @@ int insert(struct list *list, struct Reservation reservation) {
                 node->marked = 0;
                 node->next = curr;
                 pred->next = node;
-                list->size++;
                 pthread_mutex_unlock(&curr->lock);
                 pthread_mutex_unlock(&pred->lock);
 
@@ -115,6 +108,7 @@ int insert(struct list *list, struct Reservation reservation) {
  */
 struct Reservation deleteAndGet(struct list *list) {
     struct Reservation reservation;
+
     while (1) {
         struct list_reservation *pred = list->head;
         struct list_reservation *curr = list->head->next;
@@ -133,7 +127,6 @@ struct Reservation deleteAndGet(struct list *list) {
             reservation = tmp->reservation;
             curr->marked = 1; // remove logically
             pred->next = curr->next; // remove physically
-            list->size--;
             free(tmp);
             pthread_mutex_unlock(&curr->lock);
             pthread_mutex_unlock(&pred->lock);
@@ -144,4 +137,21 @@ struct Reservation deleteAndGet(struct list *list) {
         pthread_mutex_unlock(&curr->lock);
         pthread_mutex_unlock(&pred->lock);
     }
+}
+
+void destroyList(struct list *list) {
+    struct list_reservation *node;
+    while (list->head->next != list->tail) {
+        node = list->head->next;
+        list->head->next = node->next;
+        pthread_mutex_destroy(&node->lock);
+        free(node);
+    }
+
+    pthread_mutex_destroy(&list->tail->lock);
+    free(list->tail);
+
+    pthread_mutex_destroy(&list->head->lock);
+    free(list->head);
+    free(list);
 }

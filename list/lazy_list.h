@@ -30,14 +30,13 @@ struct list_reservation {
 struct list {
     struct list_reservation *head;
     struct list_reservation *tail;
-    int size;
 };
 
 struct list *create_list();
 
-void printList(struct list* list);
+void printList(struct list *list);
 
-int searchReservation(struct list* list, int flight_number);
+int searchReservation(struct list *list, int flight_number);
 
 int validate(struct list_reservation *pred, struct list_reservation *curr);
 
@@ -46,5 +45,7 @@ int isListEmpty(struct list *list);
 int insert(struct list *list, struct Reservation reservation);
 
 struct Reservation deleteAndGet(struct list *list);
+
+void destroyList(struct list *list);
 
 #endif //HY486_PROJECT_LAZY_LIST_H
