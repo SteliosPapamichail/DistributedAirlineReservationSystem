@@ -9,8 +9,8 @@ Each flight's completed reservations, are stored in a **shared stack using coars
 reservations are stored in an **unbounded total queue with sentinel locks**.
 
 Lastly, in the bottom part of the image, we see `A` airline companies represented by threads, which are responsible for managing their
-assigned flights and communicating with the reservations management center that is seen at the bottom. The communication between the different
-parts of the system is described in the next section.
+assigned flights and communicating with the reservations management center that is seen at the bottom. The center is implemented using a 
+**linked list with lazy synchronization**. The communication between the different parts of the system is described in the next section.
 
 ![image](https://github.com/SteliosPapamichail/DistributedAirlineReservationSystem/assets/58370258/77f80b63-65fc-410e-a956-59367e54aff0)
 
@@ -110,7 +110,7 @@ stacks will eventually serve the reservations stored in the queues.
 The implementation of the shared flight reservation system is divided into two phases. The first phase is the phase of creating and inserting the reservations into the stacks and queues 
 of the flights table. The second phase is the phase of managing the reservations by the airlines.
 
-## Flight reservation generation phase
+### Flight reservation generation phase
 
 In the first phase, which is the phase of creating and inserting the reservations, the agencies generate the reservations and insert them into the flight stacks and queues of the flights table. 
 More specifically, the agency with `agency_id=X` will insert its bookings into the flight queue or stack located at position `((X-1) mod A)` of the flights table. Provided that there are `A^2` agencies in the system, `A` agencies place reservations simultaneously on the 
@@ -136,7 +136,45 @@ and queues have finished, a barrier is used, called `barrier_start_1st_phase_che
 
 ### Reservations Management phase
 
+In the second phase, which is the reservation management phase, each airline manages the reservations of the flight it owns. Reservations are managed in the following way: 
 
+Any airline that has reservations in its flight queue then deletes those reservations one by one from that queue and inserts them into another structure called the reservation management center. After it has finished inserting all the reservations in the center, it 
+should decrement the integer `number_of_inserter_airlines` by one unit.
+At the same time, any airline that has no reservations in its flight queue and still has room in its flight stack, deletes reservations one by one from the reservation management center and inserts them into its flight stack, until: Either that stack is full, or 
+the management center is empty and the integer `number_of_inserter_airlines` has reached 0.
+
+```C
+struct list {
+  struct list_reservation *head; 
+  struct list_reservation *tail;
+}
+```
+
+Each node in the list is represented by the struct:
+
+```C
+struct list_reservation {
+  struct Reservation reservation; 
+  int marked;
+  pthread_mutex_t lock; struct 
+  list_reservation *next;
+}
+```
+
+P.S. Bookings in the management center are sorted based on the `reservation_number` of each booking.
+
+After all bookings have been managed, the second phase will be completed with a review by the controller. At the end of the second phase, the controller performs the following checks:
+
+1. Stack overflow check.
+2. Total size check.
+3. Total keysum check.
+4. Reservations completion check: Checks if the reservation management center as well and all queues are empty. It also checks if the integer `number_of_inserter_airlines` has the value 0. After this check is completed, this message is printed on the screen:
+`reservations completion check passed`. If any of the above checks fail, the program displays an appropriate error message (showing which check failed and why) and execution terminates.
+
+To make sure that reservation management starts after the first phase check by the controller is over, a barrier is used, which is called `barrier_start_2nd_phase`. 
+The airlines will start their execution by waiting at this barrier while the controller will continue its execution (after the end of the first phase check) by waiting at this barrier.
+To make sure that the controller will start the second phase control after all the bookings have been managed, another barrier is used, which will is called `barrier_start_2nd_phase_checks`. Airlines will terminate their execution by waiting at this 
+barrier while the controller will continue its execution waiting at this barrier.
 
 ## Compilation
 
