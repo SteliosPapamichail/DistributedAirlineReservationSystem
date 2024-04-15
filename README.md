@@ -54,10 +54,10 @@ struct stack_reservation {
 The capacity is the stack capacity, i.e. the maximum number of reservations they can to be stored on this stack. The size is the size of the stack, i.e. the number of reservations stored on the stack. The capacity of each stack depends on its position in the flights table. 
 Specifically, the stack capacity of the latter table position (i.e. position A-1) should be equal to (3/2)*A2, and the stack of each previous position of the array should have a capacity of A elements less than the stack of the next position. Therefore:
 
-• The stack of the penultimate position of the array (i.e. position A-2) will have a capacity of (3/2)*A2– A
-• The stack of the previous position (i.e. position A-3) will have capacity(3/2)*A2– 2*A
-• . . .
-• The first position stack (ie position0) will have a capacity of (3/2)*A2– (A–1)*A.
+- The stack of the penultimate position of the array (i.e. position A-2) will have a capacity of (3/2)*A2– A
+- The stack of the previous position (i.e. position A-3) will have capacity(3/2)*A2– 2*A
+- . . .
+- The first position stack (ie position0) will have a capacity of (3/2)*A2– (A–1)*A.
 
 The different stack sizes correspond to planes with different numbers of seats. Each reservation, regardless of whether it will be stored on the stack or the queue, is represented by the struct:
 
@@ -92,17 +92,15 @@ struct queue_reservation {
 The agency with identifier `agency_id` produces a total of A bookings with the following numbers reservation:
 `i*P + agency_id` where Π is the number of agencies, while i takes the values 0 ≤ i ≤ A–1. Therefore:
 
-• The agency withagency_id=1produces reservations (struct Reservation) with numbers:
-1, Π+1, 2*Π+1, 3*Π+1, ..., (A-1)*Π + 1.
-• The agency withagency_id=2produces bookings with numbers:
-2, Π+2, 2*Π+2, 3*Π+2, ..., (A-1)*Π + 2.
-• . . .
-• The agency withagency_id=Pproduces bookings with numbers: P, 
-2*P, 3*P, 4*P, ..., A*P.
+- The agency withagency_id=1produces reservations (struct Reservation) with numbers: 1, Π+1, 2*Π+1, 3*Π+1, ..., (A-1)*Π + 1.
+- The agency withagency_id=2produces bookings with numbers: 2, Π+2, 2*Π+2, 3*Π+2, ..., (A-1)*Π + 2.
+- . . .
+- The agency withagency_id=Pproduces bookings with numbers: P, 2*P, 3*P, 4*P, ..., A*P.
 
 Therefore, the total number of reservations that will be made in the entire system is `A^3`.  The reservation output and stack capacities have been chosen so that:
-1) The total capacity of all stacks is sufficient for all bookings.
-2) Some stacks (about half) are filled and the remaining reservations for the same 
+
+1. The total capacity of all stacks is sufficient for all bookings.
+2. Some stacks (about half) are filled and the remaining reservations for the same 
 flight are entered in the flight queue, while in the rest the number of items entered 
 is not enough to fill them (so there are queues that will remain empty). These 
 stacks will eventually serve the reservations stored in the queues.
@@ -111,6 +109,34 @@ stacks will eventually serve the reservations stored in the queues.
 
 The implementation of the shared flight reservation system is divided into two phases. The first phase is the phase of creating and inserting the reservations into the stacks and queues 
 of the flights table. The second phase is the phase of managing the reservations by the airlines.
+
+## Flight reservation generation phase
+
+In the first phase, which is the phase of creating and inserting the reservations, the agencies generate the reservations and insert them into the flight stacks and queues of the flights table. 
+More specifically, the agency with `agency_id=X` will insert its bookings into the flight queue or stack located at position `((X-1) mod A)` of the flights table. Provided that there are `A^2` agencies in the system, `A` agencies place reservations simultaneously on the 
+stack and in the queue of each seat, due to the way capacities have been assigned to
+stacks. So, overall, in every position of the table flights(queue and stack) will become `A^2` reservations. This is done in the following way: 
+
+First, each agency will insert its reservations into the flight stack. When the flight stack is full, the agency continues to insert its reservations into that flight's queue. It should be noted that creating and 
+inserting reservations into the stacks and queues of the flights tables is carried out simultaneously by all agencies.
+
+After all bookings have been created and inserted into the flight stacks and queues, the first phase is completed with a controller check. The controller is a special thread whose ID is 0. At the end of the first phase, it performs the following checks:
+
+1. **Stack overflow check**: The number of reservations each flight's stack contains must be less than or equal to the capacity of the respective stack. After this check is completed for each position i of the flights table, this message is printed on the screen:
+`Flight i : stack overflow check passed (capacity: X, found: Y)` where X is the stack capacity of position i and Y is the number of stack elements.
+2. **Total size check**: The total number of bookings from all flights must equal the predicted value (`A^3`). After this check is completed, this message is printed on the screen:
+`total size check passed (expected: X, found: Y)` where X is the predicted value of the total number of reservations from all flights and Y is the total number of reservations found on all flights, after a traversal of the stacks and queues of the flights table by the controller.
+3. **Total keysum check**: The sum of `reservation_number` of reservations from all flights must be equal to the prescribed total `((A6+ A3)/2)`. After this check is completed, this messsage is printed on the screen:
+`total keysum check passed (expected: X, found: Y)` where X is the predicted value of the sum of reservation_numbers of reservations from all flights and Y is the sum of reservation_numbers of reservations found on all flights, after a traversal of the stacks and queues of the flights table by the controller.
+
+If any of the above checks fail, the program displays an appropriate error message (showing which check failed and why) and execution terminates.
+After completing these checks, the controller should count the number of queues in the table flights that contain at least one object (ie are not empty). The total will stored in a global variable of integer type, named `number_of_inserter_airlines`. This variable is used in the second phase to aid termination detection by airlines.
+To make sure that the checker starts checking after all reservation entries on the stacks 
+and queues have finished, a barrier is used, called `barrier_start_1st_phase_checks`. 
+
+### Reservations Management phase
+
+
 
 ## Compilation
 
@@ -123,5 +149,3 @@ You can also use `make clean` to delete the generated files.
 You can run the program by executing the generated executable like so:
 
 `./bin/main A` where `A` is the number of flights.
-
-### By Stelios Papamichail csd4020
